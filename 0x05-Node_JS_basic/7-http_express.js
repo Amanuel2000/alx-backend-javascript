@@ -1,86 +1,63 @@
 const express = require('express');
-const fs = require('fs');
 
-function countStudents(filepath) {
+const { readFile } = require('fs');
+
+const app = express();
+const port = 1245;
+
+function countStudents(fileName) {
+  const students = {};
+  const fields = {};
+  let length = 0;
   return new Promise((resolve, reject) => {
-    fs.readFile(filepath, 'utf-8', (err, res) => {
-      if (err) return reject(new Error('Cannot load the database'));
-
-      const headerArray = res.split(/\r?\n|\n/);
-      const headers = headerArray[0].split(',');
-
-      // strip headers and convert to list of dicts
-      const dictList = [];
-      const noHeaderArray = headerArray.slice(1);
-      for (let i = 0; i < noHeaderArray.length; i += 1) {
-        const data = noHeaderArray[i].split(',');
-        if (data.length === headers.length) {
-          const row = {};
-          for (let j = 0; j < headers.length; j += 1) {
-            row[headers[j].trim()] = data[j].trim();
+    readFile(fileName, (err, data) => {
+      if (err) {
+        reject(err);
+      } else {
+        let output = '';
+        const lines = data.toString().split('\n');
+        for (let i = 0; i < lines.length; i += 1) {
+          if (lines[i]) {
+            length += 1;
+            const field = lines[i].toString().split(',');
+            if (Object.prototype.hasOwnProperty.call(students, field[3])) {
+              students[field[3]].push(field[0]);
+            } else {
+              students[field[3]] = [field[0]];
+            }
+            if (Object.prototype.hasOwnProperty.call(fields, field[3])) {
+              fields[field[3]] += 1;
+            } else {
+              fields[field[3]] = 1;
+            }
           }
-          dictList.push(row);
         }
+        const l = length - 1;
+        output += `Number of students: ${l}\n`;
+        for (const [key, value] of Object.entries(fields)) {
+          if (key !== 'field') {
+            output += `Number of students in ${key}: ${value}. `;
+            output += `List: ${students[key].join(', ')}\n`;
+          }
+        }
+        resolve(output);
       }
-
-      // count and collect first names of students per field
-      let countCS = 0;
-      let countSWE = 0;
-      const studentsCS = [];
-      const studentsSWE = [];
-
-      dictList.forEach((element) => {
-        if (element.field === 'CS') {
-          countCS += 1;
-          studentsCS.push(element.firstname);
-        } else if (element.field === 'SWE') {
-          countSWE += 1;
-          studentsSWE.push(element.firstname);
-        }
-      });
-
-      const countStudents = countCS + countSWE;
-
-      return resolve({
-        countStudents,
-        countCS,
-        countSWE,
-        studentsCS,
-        studentsSWE,
-      });
     });
   });
 }
 
-const pathToDB = process.argv[2];
-const app = express();
-const port = 1245;
-
 app.get('/', (req, res) => {
   res.send('Hello Holberton School!');
 });
-
-app.get('/students', async (req, res) => {
-  // call async function and collect needed variables
-  await countStudents(pathToDB)
-    .then(({
-      countStudents,
-      countCS,
-      countSWE,
-      studentsCS,
-      studentsSWE,
-    }) => {
-      const text = 'This is the list of our students\n';
-      const total = `Number of students: ${countStudents}\n`;
-      const CS = `Number of students in CS: ${countCS}. List: ${studentsCS.toString().split(',').join(', ')}\n`;
-      const SWE = `Number of students in SWE: ${countSWE}. List: ${studentsSWE.toString().split(',').join(', ')}`;
-      res.status(200).send(text + total + CS + SWE);
-    })
-    .catch(() => {
-      res.status(404).send('Cannot load the database');
-    });
+app.get('/students', (req, res) => {
+  countStudents(process.argv[2].toString()).then((output) => {
+    res.send(['This is the list of our students', output].join('\n'));
+  }).catch(() => {
+    res.send('This is the list of our students\nCannot load the database');
+  });
 });
 
-app.listen(port);
+app.listen(port, () => {
+});
 
 module.exports = app;
